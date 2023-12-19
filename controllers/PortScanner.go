@@ -2,9 +2,13 @@ package controllers
 
 import (
 	"fmt"
-	"log"
-	"strconv"
 	"net"
+	"strconv"
+	"sync"
+	"time"
+	"log"
+
+	"NetworkAnalyzer/utils"
 
 	"github.com/Ullaakut/nmap/v2"
 )
@@ -52,37 +56,86 @@ func NmapPortScanner(target, startPort, endPort string) {
 }
 
 func GoPortScanner(target, startPort, endPort string) {
-	
-	// Convertir les ports en chaînes de caractères
-	startPortInt, err := strconv.Atoi(startPort)
-	if err != nil {
-		log.Fatalf("Erreur lors de la conversion du port de départ: %v", err)
-	}
-	startPortStr := strconv.Itoa(startPortInt)
+	targetAddr := net.ParseIP(target)
+	maxGoroutines := 5000 // Nombre maximal de goroutines autorisées
+	semaphore := make(chan struct{}, maxGoroutines)
 
-	endPortInt, err := strconv.Atoi(endPort)
-	if err != nil {
-		log.Fatalf("Erreur lors de la conversion du port de fin: %v", err)
-	}
-	endPortStr := strconv.Itoa(endPortInt)
-
-	// Créer une connexion TCP
-	conn, err := net.Dial("tcp", target + ":" + startPortStr)
-	if err != nil {
-		log.Fatalf("Erreur lors de la connexion au port %s: %v", startPortStr, err)
-	}
-	defer conn.Close()
-
-	// Afficher le port ouvert
-	fmt.Printf("Port %s ouvert\n", startPortStr)
-
-	// Vérifier si le port de fin a été atteint
-	if startPortStr == endPortStr {
+	// Vérifier l'adresse IP
+	if targetAddr == nil {
+		fmt.Println("Adresse IP invalide")
 		return
 	}
 
-	// Appeler la fonction récursivement
-	GoPortScanner(target, strconv.Itoa(startPortInt + 1), endPortStr)
+	// Convertir l'adresse IP en entier 32 bits
+	targetIPInt := ipToInt(targetAddr)
+
+	// Démarrer le groupe d'attente
+	var wg sync.WaitGroup
+
+	// Scan
+	for ip := targetIPInt; ip <= targetIPInt; ip++ {
+		ipStr := intToIP(ip).String() // IP en chaîne de caractères
+		startPortInt, err := strconv.Atoi(startPort)
+		if err != nil {
+			log.Fatalf("Erreur lors de la conversion du port de départ: %v", err)
+		}
+		endPortInt, err := strconv.Atoi(endPort)
+		if err != nil {
+			log.Fatalf("Erreur lors de la conversion du port de fin: %v", err)
+		}
+
+		var wg sync.WaitGroup
+
+		// Vérifier les ports
+		for port := startPortInt; port <= endPortInt; port++ {
+			wg.Add(1)
+			semaphore <- struct{}{}
+			go func(ip, portStr string) {
+				defer func() {
+					<-semaphore
+					wg.Done()
+				}()
+				if isPortOpen(ip, portStr) {
+					result := fmt.Sprintf("%s:%s\n", ip, portStr)
+					fmt.Print(result)
+				}
+			}(ipStr, strconv.Itoa(port))
+		}
+	}
+
+	// Attendre la fin des goroutines
+	go func() {
+		wg.Wait()
+		close(semaphore) // Fermer le canal une fois que toutes les goroutines sont terminées
+	}()
+
+	<-semaphore // Attendre que le canal soit fermé
+	utils.PauseScreen("Scan terminé")
+}
+
+// Convertir l'adresse IP en entier 32 bits
+func ipToInt(ip net.IP) int {
+	ip = ip.To4()
+	if ip == nil {
+		// Adresse IP invalide
+		return 0
+	}
+	return int(ip[0])<<24 + int(ip[1])<<16 + int(ip[2])<<8 + int(ip[3])
+}
+
+// Convertir l'entier 32 bits en adresse IP
+func intToIP(ip int) net.IP {
+	return net.IPv4(byte(ip>>24), byte(ip>>16), byte(ip>>8), byte(ip))
+}
+
+// Vérifier si le port est ouvert
+func isPortOpen(ip, port string) bool {
+	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%s", ip, port), 10*time.Second)
+	if err != nil {
+		return false
+	}
+	conn.Close()
+	return true
 }
 
 func PortScanner() {
@@ -128,10 +181,12 @@ func PortScanner() {
 
 	switch choice {
 		case 1:
-			fmt.Print("Veuillez patienter... \n")
+			utils.ClearScreen()
+			fmt.Print("Scan en cours... \n")
 			NmapPortScanner(target, startPort, endPort)
 		case 2:
-			fmt.Print("Veuillez patienter... \n")
+			utils.ClearScreen()
+			fmt.Print("Scan en cours... \n")
 			GoPortScanner(target, startPort, endPort)
 		default:
 			fmt.Println("Option non valide. Veuillez choisir à nouveau.")
