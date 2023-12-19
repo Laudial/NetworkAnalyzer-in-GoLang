@@ -11,7 +11,7 @@ import (
 func DnsResolver() {
 	var host string
 
-	fmt.Print("Entrez le nom de domaine (example.com): ")
+	fmt.Print("Nom de domaine (example.com): ")
 	_, err := fmt.Scan(&host)
 	if err != nil {
 		fmt.Println("Erreur de saisie :", err)

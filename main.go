@@ -15,6 +15,7 @@ func main() {
 
 		// Affichage du menu
 		fmt.Println("1. Résolution DNS")
+		fmt.Println("2. Scan de ports")
 		fmt.Println("0. Quitter")
 
 		// Demande du choix de l'utilisateur
@@ -35,6 +36,9 @@ func main() {
 		case 1:
 			utils.ClearScreen()
 			controllers.DnsResolver()
+		case 2:
+			utils.ClearScreen()
+			controllers.PortScanner()
 		default:
 			utils.ClearScreen()
 			fmt.Println("Option non valide. Veuillez choisir à nouveau.")
